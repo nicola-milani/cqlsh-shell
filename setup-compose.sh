@@ -136,6 +136,9 @@ factory = cqlshlib.ssl.ssl_transport_factory
 validate = true
 certfile = /root/.cassandra/AmazonRootCA1.pem
 
+[copy-from]
+CHUNKSIZE=50
+
 EOF
 
     #"create docker-compose file with selected options"
