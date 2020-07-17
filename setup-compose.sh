@@ -41,7 +41,8 @@ function progress-bar() {
 
 function export_credentials() {
     progress-bar 2
-
+    mkdir -p >${MCS_FOLDER}/raw
+    touch ${MCS_FOLDER}/.credentials
     cat <<EOF >${MCS_FOLDER}/.credentials
 MCS_SSL="$MCS_SSL"
 MCS_PORT="$MCS_PORT"
@@ -150,7 +151,7 @@ services:
 
   cqlsh:
     image: cassandra:3.11
-    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL
+    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout=6000 --request-timeout=6000
     volumes:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
       - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
