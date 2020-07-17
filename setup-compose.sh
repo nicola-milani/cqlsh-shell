@@ -1,4 +1,6 @@
 #!/bin/bash
+#author: Nicola Milani
+
 MCS_FOLDER="./MCS_FOLDER"
 UNSAVE=0
 function check_env() {
