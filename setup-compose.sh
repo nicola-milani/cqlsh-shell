@@ -114,7 +114,10 @@ function setup() {
 function running() {
     echo "Creating temporary directory with configuration setup named MCS_FOLDER in your current directory"
     mkdir -p ${MCS_FOLDER}/raw
-    curl -o ${MCS_FOLDER}/AmazonRootCA1.pem https://www.amazontrust.com/repository/AmazonRootCA1.pem -O
+    
+    if [ ! -f ${MCS_FOLDER}/AmazonRootCA1.pem ]; then
+        curl -o ${MCS_FOLDER}/AmazonRootCA1.pem https://www.amazontrust.com/repository/AmazonRootCA1.pem -O
+    fi
 
     if [ ! -f ${MCS_FOLDER}/AmazonRootCA1.pem ]; then
         echo "Unable to download file from Amazon Services, check your internet settings or try to download it from https://www.amazontrust.com/repository/AmazonRootCA1.pem"
