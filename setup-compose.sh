@@ -140,6 +140,9 @@ certfile = /root/.cassandra/AmazonRootCA1.pem
 [copy-from]
 CHUNKSIZE=50
 
+[csv]
+field_size_limit = 1000000000
+
 EOF
 
     #"create docker-compose file with selected options"
