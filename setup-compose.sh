@@ -138,10 +138,19 @@ validate = true
 certfile = /root/.cassandra/AmazonRootCA1.pem
 
 [copy-from]
-CHUNKSIZE=50
+CHUNKSIZE=30
+INGESTRATE=500
+MAXINSERTERRORS=-1
+MAXPARSEERRORS=-1
+MINBATCHSIZE=1
+MAXBATCHSIZE=10
+
+[copy]
+NUMPROCESSES=16
+MAXATTEMPTS=25
 
 [csv]
-field_size_limit = 1000000000
+field_size_limit=999999
 
 EOF
 
