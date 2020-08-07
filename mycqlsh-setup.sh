@@ -4,7 +4,22 @@
 MCS_FOLDER="./MCS_FOLDER"
 
 UNSAVE=0
+YES=0
+VERSION=0.2.1
+PROGNAME=${0##*/}
+SHORTOPTS="hvyck:"
+LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,get-list-tables,entrypoint:,export-tables:,yes,export-schema:,import-schema:"
+SESSION="cqlsh"
+ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
+eval set -- "$ARGS"
+EXECUTE=""
 
+function build_execute(){
+    #copy one table from keyspace to local
+    local text="--execute \"COPY ${KEYSPACE}.${TABLE} TO '/raw/${KEYSPACE}_${TABLE}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
+    
+
+}
 function check_env() {
     docker --version >/dev/null 2>&1
     local DOCKER=$?
@@ -147,8 +162,10 @@ function read_credential(){
     done
 }
 
+#
+# setup configuration file for running connection
+#
 function setup() {
-    local SERVER=$1
     check_env
     if [[ "$UNSAVE" -eq 1 ]]; then
         if [ -f ${MCS_FOLDER}/.credentials_$SERVER ]; then
@@ -178,9 +195,7 @@ function setup() {
             fi
         fi
     fi
-}
 
-function running() {
     echo "Creating temporary directory with configuration setup named MCS_FOLDER in your current directory"
     mkdir -p ${MCS_FOLDER}/raw
 
@@ -192,7 +207,6 @@ function running() {
         echo "Unable to download file from Amazon Services, check your internet settings or try to download it from https://www.amazontrust.com/repository/AmazonRootCA1.pem"
         exit 1
     fi
-
     #create cqlshrc in MCS_FOLDER
     echo "create cqlshrc file in ${MCS_FOLDER}"
 
@@ -227,6 +241,9 @@ if [ ! -z $MCS_HOST ]; then
 else
     CUSTOM=$SERVER
 fi
+
+build_execute
+exit 1
     #"create docker-compose file with selected options"
     echo "create docker-compose file with selected options"
     cat <<EOF >${CUSTOM}_docker-compose.yaml
@@ -236,7 +253,7 @@ services:
 
   cqlsh_${MCS_HOST}:
     image: cassandra:3.11
-    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" --request-timeout="$MCS_RTIMEOUT"
+    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" --request-timeout="$MCS_RTIMEOUT $EXECUTE"
     volumes:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
       - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
@@ -253,7 +270,10 @@ EOF
     echo "You can use \"/raw\" folder inside the container to move file between host and console. The \"/raw\" folder is in $(pwd)/MCS_FOLDER"
 
     echo "waiting..."
-    progress-bar 2
+    #progress-bar 2
+}
+
+function running() {
 
     docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
 
@@ -272,16 +292,21 @@ function logo() {
 function usage() {
     logo
     cat <<EOF
-    Options:
-        --shell   connect
+Usage: $PROGNAME <options>
+    --cmd
+    --shell <hostname or ip> [-y|--yes] -c|--connect connect to cassandra server
+    --shell <hostname or ip> [--yes] [--keyspace: <keyspace_name>] -c|--connect
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --list-tables
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-schema
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-schema
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-tables: <tables list>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-tables: <tables list>
+    --list-auth print list of credentials by server
+    --rmauth  remove .credentials
+    --clean   remove all temporary files
+    -v|--version print current version
+    -h|--help    print current message
 
-    Get info
-        --version print current version
-        --list-auth print list of credentials by server
-        --help    print current message
-    Edit
-        --rmauth  remove .credentials
-        --clean   remove all temporary files
 EOF
 
 }
@@ -304,16 +329,15 @@ EOF
     docker-compose run --entrypoint bash --rm cqlsh
 }
 
-function main() {
-    echo $2 $3 $4 $5
-    if [ "$2" = "cmd" ]; then
-        echo "Running a cqlsh with bash console..."
-        entrypoint_cmd
-    elif [ "$2" = "--yes" ]; then
-        setup $SERVER
+
+#
+# function to review setup configuration if all is ok, launch running
+#
+function review() {
+    if [ "$yn" = "y" ]; then
+        setup
         running
     else
-        #exit 1
         setup $SERVER
         yn="Y"
         while true; do
@@ -353,8 +377,8 @@ saved_credentials(){
 
 #STARTED POINT
 
-for i in "$@"; do
-    case $i in
+while true; do
+    case $1 in
     -h|--help)
         usage
         exit 0
@@ -363,7 +387,7 @@ for i in "$@"; do
         echo "Version: $VERSION"
         exit 0
         ;;
-    -la|--list-auth)
+    --list-auth)
         echo "SAVED CREDENTIALS BY SERVER"
         saved_credentials
         exit 0
@@ -380,14 +404,35 @@ for i in "$@"; do
         fi
         exit 0
         ;;
+    --cmd)
+        entrypoint_cmd
+        exit 0
+        ;;
     --shell)
         shift
         SERVER=$1
-        main $SERVER $2 $3 $4 $5
+        echo $SERVER
+        shift
+        ;;
+    -y|--yes)
+        yn=y
+        shift
+        ;;
+    -k|--keyspace)
+        shift
+        KEYSPACE=$1
+        echo $KEYSPACE
+        shift
+        ;;
+    -c|--connect)
+        echo $KEYSPACE
+        review $SERVER
+        break
         exit 0
         ;;
     *) 
-    usage
-    break
+        usage
+        break
+        ;;
     esac
 done
