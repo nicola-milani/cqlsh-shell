@@ -1,16 +1,7 @@
 #!/bin/bash
 #author: Nicola Milani
 
-if [ -f /etc/mycqlsh.conf ]; then
-    source /etc/mycqlsh.conf
-elif [ -f ./mycqlsh.conf ]; then
-    source ./mycqlsh.conf
-else
-    echo "configuration file not found"
-    exit 1
-fi
-
-MCS_FOLDER="${MAIN_CONF}/MCS_FOLDER"
+MCS_FOLDER="./MCS_FOLDER"
 
 UNSAVE=0
 
@@ -72,7 +63,7 @@ EOF
 function load_credentials() {
      CREDENTIAL_FILE=""
      while true; do
-        echo "Digit q to exit"
+        echo "Digit q to exit, or c to force custom"
         select ITEM in $(ls $MCS_FOLDER/.credentials*); do
             case $ITEM in
             *)
@@ -85,6 +76,10 @@ function load_credentials() {
         if [ "$REPLY" = "q" ]; then
             echo "bye bye"
             exit 0
+        fi
+        if [ "$REPLY" = "c" ]; then
+            read_credential
+            break
         fi
         if [ ! -z $ITEM ]; then
             CREDENTIAL_FILE=${ITEM}
@@ -173,7 +168,8 @@ function setup() {
         if [ "$SERVER" = "CLEAN" ]; then
             read_credential
         else
-            if [ -f ${MCS_FOLDER}/.credentials* ]; then
+            ls -al ${MCS_FOLDER}/.credentials* > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
                 echo "Credential files was found, load it. If you want to clean your credentials, run $0 with --rmauth option or --clean"
                 #progress-bar 5
                 load_credentials
@@ -225,15 +221,20 @@ MAXATTEMPTS=25
 field_size_limit=999999
 
 EOF
-
+echo $MCS_HOST
+if [ ! -z $MCS_HOST ]; then
+    CUSTOM=$MCS_HOST
+else
+    CUSTOM=$SERVER
+fi
     #"create docker-compose file with selected options"
     echo "create docker-compose file with selected options"
-    cat <<EOF >${SERVER}_docker-compose.yaml
+    cat <<EOF >${CUSTOM}_docker-compose.yaml
 version: '3.7'
 
 services:
 
-  cqlsh:
+  cqlsh_${MCS_HOST}:
     image: cassandra:3.11
     entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" --request-timeout="$MCS_RTIMEOUT"
     volumes:
@@ -254,7 +255,7 @@ EOF
     echo "waiting..."
     progress-bar 2
 
-    docker-compose -f ${SERVER}_docker-compose.yaml run --rm cqlsh
+    docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
 
 }
 
@@ -273,6 +274,7 @@ function usage() {
     cat <<EOF
     Options:
         --shell   connect
+
     Get info
         --version print current version
         --list-auth print list of credentials by server
@@ -307,6 +309,9 @@ function main() {
     if [ "$2" = "cmd" ]; then
         echo "Running a cqlsh with bash console..."
         entrypoint_cmd
+    elif [ "$2" = "--yes" ]; then
+        setup $SERVER
+        running
     else
         #exit 1
         setup $SERVER
