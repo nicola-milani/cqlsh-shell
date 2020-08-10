@@ -3,23 +3,48 @@
 
 MCS_FOLDER="./MCS_FOLDER"
 
-UNSAVE=0
-YES=0
 VERSION=0.2.1
 PROGNAME=${0##*/}
 SHORTOPTS="hvyck:"
-LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,get-list-tables,entrypoint:,export-tables:,yes,export-schema:,import-schema:"
+LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-tables:,yes,export-schema,import-schema"
+UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-tables,import-tables"
 SESSION="cqlsh"
 ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
 eval set -- "$ARGS"
+#execution string for cqlsh, must be empty
 EXECUTE=""
+#OPTION TO SAVE credentials, 0 for none
+UNSAVE=0
+#LIST OF TABLES to SAVE
+TABLES_LIST=""
+#ARGUMENT for action to keyspace
+MODE=""
 
+#BUILD STRING EXECUTE
 function build_execute(){
     #copy one table from keyspace to local
-    local text="--execute \"COPY ${KEYSPACE}.${TABLE} TO '/raw/${KEYSPACE}_${TABLE}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
-    
+    case $MODE in
+        list-tables)
+           # echo "list tables on keyspace"
+            local text='--execute "describe tables;"'
+            ;;
+        export-tables)
+            echo "export_table"
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
+            ;;
+        import-table)
+            echo "import_table"
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE} FROM '/raw/${KEYSPACE}_${TABLE}.csv' WITH HEADER=true\""
+            ;;
+        *) 
+            ;;
+    esac
 
+
+    EXECUTE=${text}
+    #echo $EXECUTE
 }
+
 function check_env() {
     docker --version >/dev/null 2>&1
     local DOCKER=$?
@@ -30,8 +55,6 @@ function check_env() {
     if [ $DOCKER != 0 ] || [ $DOCKERCOMPOSE != 0 ] || [ $DOCKERSERVICE != 0 ]; then
         echo "docker is not installed or need attention"
         exit 1
-    else
-        echo "docker is correct installed and running"
     fi
 }
 
@@ -176,7 +199,8 @@ function setup() {
     fi
     if [ ! -z $SERVER ]; then 
         if [ -f ${MCS_FOLDER}/.credentials_$SERVER ]; then
-            echo "credential file was found for $SERVER"
+            #echo "credential file was found for $SERVER"
+            #echo "loading ${MCS_FOLDER}/.credentials_$SERVER"
             load_credential ${MCS_FOLDER}/.credentials_$SERVER
         else
             read_credential ${MCS_FOLDER}/.credentials_$SERVER $SERVER
@@ -196,7 +220,7 @@ function setup() {
         fi
     fi
 
-    echo "Creating temporary directory with configuration setup named MCS_FOLDER in your current directory"
+   # echo "Creating temporary directory with configuration setup named MCS_FOLDER in your current directory"
     mkdir -p ${MCS_FOLDER}/raw
 
     if [ ! -f ${MCS_FOLDER}/AmazonRootCA1.pem ]; then
@@ -208,7 +232,7 @@ function setup() {
         exit 1
     fi
     #create cqlshrc in MCS_FOLDER
-    echo "create cqlshrc file in ${MCS_FOLDER}"
+    #echo "create cqlshrc file in ${MCS_FOLDER}"
 
     cat <<EOF >${MCS_FOLDER}/cqlshrc
 [connection]
@@ -235,17 +259,26 @@ MAXATTEMPTS=25
 field_size_limit=999999
 
 EOF
-echo $MCS_HOST
-if [ ! -z $MCS_HOST ]; then
-    CUSTOM=$MCS_HOST
-else
-    CUSTOM=$SERVER
-fi
 
-build_execute
-exit 1
+   # echo $MCS_HOST
+    if [ ! -z $MCS_HOST ]; then
+        CUSTOM=$MCS_HOST
+    else
+        CUSTOM=$SERVER
+    fi
+
+   # echo $MCS_KEYSPACE
+    if [ ! -z $KEYSPACE ]; then
+        MCS_KEYSPACE="--keyspace $KEYSPACE"
+    else
+        MCS_KEYSPACE=""
+    fi
+
+    build_execute $MODE
+
+   #exit 1
     #"create docker-compose file with selected options"
-    echo "create docker-compose file with selected options"
+    #echo "create docker-compose file with selected options"
     cat <<EOF >${CUSTOM}_docker-compose.yaml
 version: '3.7'
 
@@ -253,29 +286,30 @@ services:
 
   cqlsh_${MCS_HOST}:
     image: cassandra:3.11
-    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" --request-timeout="$MCS_RTIMEOUT $EXECUTE"
+    entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" $MCS_KEYSPACE --request-timeout="$MCS_RTIMEOUT" $EXECUTE
     volumes:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
       - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
       - ${MCS_FOLDER}/raw:/raw
 EOF
 
-    #clear
-    if [ $SAVE="Y" ]; then
-        echo "Now all is ok, your setup files are in $(pwd)/MCS_FOLDER. Your credentials informations are saved in $(pwd)/MCS_FOLDER/.credentials file"
-    else
-        echo "Now all is ok, your setup files are in $(pwd)/MCS_FOLDER. No credentials informations are saved"
-    fi
-    echo "After few minutes, your MCS console will running in a secure container."
-    echo "You can use \"/raw\" folder inside the container to move file between host and console. The \"/raw\" folder is in $(pwd)/MCS_FOLDER"
 
-    echo "waiting..."
+    #clear
+    #if [ $SAVE="Y" ]; then
+    #    echo "Now all is ok, your setup files are in $(pwd)/MCS_FOLDER. Your credentials informations are saved in $(pwd)/MCS_FOLDER/.credentials file"
+    #else
+    #    echo "Now all is ok, your setup files are in $(pwd)/MCS_FOLDER. No credentials informations are saved"
+    #fi
+   # echo "After few minutes, your MCS console will running in a secure container."
+   # echo "You can use \"/raw\" folder inside the container to move file between host and console. The \"/raw\" folder is in $(pwd)/MCS_FOLDER"
+
+   # echo "waiting..."
     #progress-bar 2
 }
 
 function running() {
 
-    docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
+    docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
 
 }
 
@@ -299,7 +333,7 @@ Usage: $PROGNAME <options>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --list-tables
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-schema
-    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-tables: <tables list>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-tables: <table name>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-tables: <tables list>
     --list-auth print list of credentials by server
     --rmauth  remove .credentials
@@ -334,7 +368,9 @@ EOF
 # function to review setup configuration if all is ok, launch running
 #
 function review() {
+
     if [ "$yn" = "y" ]; then
+        #echo "Execution auto"
         setup
         running
     else
@@ -342,7 +378,11 @@ function review() {
         yn="Y"
         while true; do
             echo "Your setup: "
-            echo "cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout=$MCS_CTIMEOUT --request-timeout=$MCS_RTIMEOUT"
+            if [ ! -z $KEYSPACE ]; then
+                echo "cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout=$MCS_CTIMEOUT --request-timeout=$MCS_RTIMEOUT --keyspace=$KEYSPACE"
+            else
+                echo "cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout=$MCS_CTIMEOUT --request-timeout=$MCS_RTIMEOUT"
+            fi
             read -e -i "$yn" -p "Is it correct? <default Y> " yn
             case $yn in
             [Yy]*)
@@ -376,6 +416,31 @@ saved_credentials(){
 
 
 #STARTED POINT
+
+SECURE=0
+ERRORS=()
+IFS=', ' read -r -a ARR_UNIQUEOPTS <<< "$UNIQUEOPTS"
+for a in $@
+do
+    for element in "${ARR_UNIQUEOPTS[@]}"
+    do
+        if [ $a == "--" ]; then
+            continue
+        elif [[ $a == --* ]]; then
+            if [ ${a#??} == "$element" ]; then
+                ERRORS+=($a)
+                SECURE=$((SECURE+1))
+            fi
+        fi
+    done
+done
+
+if [ $SECURE -gt 1 ]; then
+    echo "ERROR: Argument ${ERRORS[0]} is incompatible with ${ERRORS[@]:1} options"
+    usage
+    exit 1
+fi
+
 
 while true; do
     case $1 in
@@ -411,7 +476,6 @@ while true; do
     --shell)
         shift
         SERVER=$1
-        echo $SERVER
         shift
         ;;
     -y|--yes)
@@ -421,11 +485,38 @@ while true; do
     -k|--keyspace)
         shift
         KEYSPACE=$1
-        echo $KEYSPACE
+        #echo $KEYSPACE
+        shift
+        ;;
+    --list-tables)
+        MODE=${1#??}
+        review $SERVER
+        break
+        ;;
+    --export-schema)
+        MODE=${1#??}
+        review $SERVER
+        ;;
+    --import-schema)
+        MODE=${1#??}
+        review $SERVER
+        break;
+        ;;
+    --export-tables)
+        MODE=${1#??}
+        shift;
+        TABLE_NAME=$1
+        shift
+        review $SERVER
+        exit 0
+        ;;
+    --import-tables)
+        MODE=${1#??}
+        shift;
+        TABLES_LIST=$1
         shift
         ;;
     -c|--connect)
-        echo $KEYSPACE
         review $SERVER
         break
         exit 0

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#
+# CONFIGURATION FILE
+#
+
+# NAME OF CURRENT PROCESS 
+
+appName="CQLSH_UTILS"
+
+# DEFAULT LOG DESTINATIONS 
+# 
+# 1 for syslog
+# 2 for log file
+# 3 for telegram
+# 4 for verbose
+#
+
+destinationsLogs=(1 2 4)
+
+#
+# TELEGRAM CLIENTS
+#
+telegramClient="/usr/local/bin/sendtelegram"
+telegramClientConfigurationFile="/etc/telegramrc"

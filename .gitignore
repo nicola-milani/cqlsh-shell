@@ -1,3 +1,5 @@
 MCS_FOLDER/
 *docker-compose.yaml
 *syncthing*
+LOGS/
+*_list_tables
