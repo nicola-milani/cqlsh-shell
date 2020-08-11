@@ -107,7 +107,6 @@ function error_message()
 {
     local MSG="$1"
     echo -e "\e[31m$MSG\e[39m"
-    exit 1
 }
 
 get_script_dir

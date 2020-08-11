@@ -143,15 +143,25 @@ function getStatistics(){
 function import_table(){
     CASSANDRA_HOST=$1
     KEYSPACE=$2
-    TABLE_LIST="${CASSANDRA_HOST}_${KEYSPACE}_list_tables"
+    TABLE_LIST="${3}"
     for d in $(cat $TABLE_LIST); do
-        for f in $(ls $SHUF_FOLDER/*${d}* | grep -v merged | sort -V ); do
-            if [ "${f:(-3)}" = "csv" ]; then
-                message "Get TABLE HEADER"
-                HEADER=$(cat $f | head -1 )
-                echo $HEADER
-            fi
-        done
+        message "Provo ad importare la tabella $d"
+        if [ $(ls $RAW_FOLDER | grep -v merged | grep ${d}.csv | sort -V | wc -l ) -gt 0 ]; then
+            for f in $(ls $RAW_FOLDER | grep -v merged | grep $d | sort -V ); do
+                message "proviene dai file ${f}"
+                if [ "${f:(-3)}" = "csv" ]; then
+                    message "estraggo intestazione"
+                    HEADER=$(cat $RAW_FOLDER/$f | head -1 )
+                    echo $HEADER
+                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $d --header none --from $RAW_FOLDER/$f
+                    exit 1
+                else
+                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $d --header $HEADER --from $RAW_FOLDER/$f
+                fi
+            done
+        else
+            error_message "Non ci sono csv per $d"
+        fi
     done
     #copy datahub.palinsesto (rete,orainizioeffettiva,codicecontenitore,codicecontenuto,codicematerialeis,codicepassaggio,codiceprodotto,codicesegmento,codicesupporto,codicetargetprogramma,criptato,durataeffettiva,durataeffettivaalframe,durataeffettivabumper,durataeffettivacontenitore,durataeffettivalorda,durataprevistacontenitore,durataprevistapalinsesto,duratasponsorpromo,edizprod,elemprod,fineparte,flagaffogato,flagqualitaconvenienza,idprod,inizioparte,note,orafineeffettiva,orafineeffettivaalframe,orainizioeffettivaalframe,oraprevistacontenitore,oraprevistapalinsesto,posizionesponsorpromo,presenzatesti,programmabilingue,programmaperminori,progressivoparteprogramma,progressivosupportoprogramma,semaforo,sequenzaspotnastro,sottotitolato,tipoaudio,tipoevento,tipooggetto,titoloassemblaggio,titolocontenitore,versprod) from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
     
@@ -164,9 +174,13 @@ function import_table(){
 #import table
 
 #call function
+
+
+lst="${SOURCE_SERVER}_${SOURCE_KEYSPACE}_list_tables"
+
 #list_tables $SOURCE_SERVER $SOURCE_KEYSPACE
 #list_tables $TARGET_SERVER $TARGET_KEYSPACE
 export_tables $SOURCE_SERVER $SOURCE_KEYSPACE
-#shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
-#getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
-#import_table $TARGET_SERVER $TARGET_KEYSPACE 
+shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
+getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
+#import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}

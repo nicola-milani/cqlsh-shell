@@ -8,10 +8,17 @@ else
     exit 1
 fi
 
+if [ -f ./message_library.sh ]; then
+    source ./message_library.sh
+else
+    echo "library not found"
+    exit 1
+fi
+
 VERSION=0.2.1
 PROGNAME=${0##*/}
 SHORTOPTS="hvyck:"
-LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-table:,yes,export-schema,import-schema,import-table:"
+LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-table:,yes,export-schema,import-schema,import-table:,header:,from:"
 UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-table,import-table"
 SESSION="cqlsh"
 ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
@@ -35,16 +42,16 @@ function build_execute(){
             ;;
         export-table)
             #echo "export_table"
-            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=90000\""
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
             ;;
         import-table)
             echo "import_table"
-            HEADER="$MCS_FOLDER/raw/source/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv_HEADER_0.csv"
+            if [ "$HEADER" = "none" ]; then
+                local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} from '$TABLE_FROM' WITH HEADER=true\""
+            else
+                local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} ( $HEADER ) from '$TABLE_FROM' WITH HEADER=false\""
+            fi
             #copy datahub.palinsesto  from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
-
-            local text="--execute \"COPY ${KEYSPACE}.${TABLE} ($(cat $HEADER ) from '$MCS_FOLDER/raw/shuf/raw/${SERVER}_${KEYSPACE}_${TABLE}.csv*' WITH HEADER=false\""
-            echo $text
-            exit 1
             ;;
         *) 
             ;;
@@ -528,6 +535,18 @@ while true; do
         shift;
         TABLE_NAME=$1
         shift
+        if [ "$1" = "--header" ]; then
+            shift
+            HEADER=$1
+            echo $HEADER
+            shift
+            if [ "$1" = "--from" ]; then
+                shift
+                TABLE_FROM=$1
+            else
+                error_message "import csv no specificate"
+            fi
+        fi
         review $SERVER
         exit 0
         ;;
