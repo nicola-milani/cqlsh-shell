@@ -110,9 +110,15 @@ function shufle_table(){
     fi
     mv ${RAW_FOLDER}/*.csv* ${SOURCE_FOLDER}/
     message "shuffle all file exept the first with header"
-    for FILE in $(ls ${SOURCE_FOLDER}/* | grep -v .csv | sort -V ); do
+    for FILE in $(ls ${SOURCE_FOLDER}/* | grep csv. | sort -V ); do
         do_notify "RUNNING" "START SHUFLE ALL TABLES for $FILE"
         shuf -o ${SHUF_FOLDER}/${FILE##*/} < ${FILE}
+        rm ${FILE}
+    done
+    for FILE in $(ls ${SOURCE_FOLDER}/* | sort -V ); do
+        do_notify "RUNNING" "START SHUFLE ALL HEADER for $FILE"
+        head -n +1 ${FILE} > ${SHUF_FOLDER}/${FILE##*/}
+        sed 1,1d ${FILE} | shuf >> ${SHUF_FOLDER}/${FILE##*/}
         rm ${FILE}
     done
 }
@@ -144,23 +150,22 @@ function import_table(){
     CASSANDRA_HOST=$1
     KEYSPACE=$2
     TABLE_LIST="${3}"
-    for d in $(cat $TABLE_LIST); do
-        message "Provo ad importare la tabella $d"
-        if [ $(ls $RAW_FOLDER | grep -v merged | grep ${d}.csv | sort -V | wc -l ) -gt 0 ]; then
-            for f in $(ls $RAW_FOLDER | grep -v merged | grep $d | sort -V ); do
+    for table in $(cat $TABLE_LIST); do
+        message "Provo ad importare la tabella $table"
+        if [ $(ls $SHUF_FOLDER | grep -v merged | grep ${table}.csv | sort -V | wc -l ) -gt 0 ]; then
+            for f in $(ls $SHUF_FOLDER | grep -v merged | grep $table | sort -V ); do
                 message "proviene dai file ${f}"
                 if [ "${f:(-3)}" = "csv" ]; then
                     message "estraggo intestazione"
-                    HEADER=$(cat $RAW_FOLDER/$f | head -1 )
-                    echo $HEADER
-                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $d --header none --from $RAW_FOLDER/$f
-                    exit 1
+                    HEADER=$(cat $SHUF_FOLDER/$f | head -1 | tr -d '\r')
+                    do_notify "RUNNGIN" "IMPORT $table to $CASSANDRA_HOST:$KEYSPACE"
+                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table ${table} --header none --from /raw/shuf/$f
                 else
-                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $d --header $HEADER --from $RAW_FOLDER/$f
+                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $table --header $HEADER --from /raw/shuf/$f
                 fi
             done
         else
-            error_message "Non ci sono csv per $d"
+            error_message "Non ci sono csv per $table"
         fi
     done
     #copy datahub.palinsesto (rete,orainizioeffettiva,codicecontenitore,codicecontenuto,codicematerialeis,codicepassaggio,codiceprodotto,codicesegmento,codicesupporto,codicetargetprogramma,criptato,durataeffettiva,durataeffettivaalframe,durataeffettivabumper,durataeffettivacontenitore,durataeffettivalorda,durataprevistacontenitore,durataprevistapalinsesto,duratasponsorpromo,edizprod,elemprod,fineparte,flagaffogato,flagqualitaconvenienza,idprod,inizioparte,note,orafineeffettiva,orafineeffettivaalframe,orainizioeffettivaalframe,oraprevistacontenitore,oraprevistapalinsesto,posizionesponsorpromo,presenzatesti,programmabilingue,programmaperminori,progressivoparteprogramma,progressivosupportoprogramma,semaforo,sequenzaspotnastro,sottotitolato,tipoaudio,tipoevento,tipooggetto,titoloassemblaggio,titolocontenitore,versprod) from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
@@ -178,19 +183,21 @@ target_lst="${TARGET_SERVER}_${TARGET_KEYSPACE}_list_tables"
 
 do_notify "RUNNING" "EXTRACT LIST OF TABLES FROM $SOURCE_SERVER:$SOURCE_KEYSPACE"
 #list_tables $SOURCE_SERVER $SOURCE_KEYSPACE
+
 do_notify "RUNNING" "EXTRACT LIST OF TABLES FROM $TARGET_SERVER:$TARGET_KEYSPACE"
 #list_tables $TARGET_SERVER $TARGET_KEYSPACE
+
 if [ $(cat $target_lst | wc -l | cut -d " " -f1 ) -eq $(cat $lst | wc -l | cut -d " " -f1 ) ]; then
 
-    do_notify "RUNNING" "EXTRACT CONTENTS OF TABLES FROM $SOURCE_SERVER:$SOURCE_KEYSPACE"
-    export_tables $SOURCE_SERVER $SOURCE_KEYSPACE
+    #do_notify "RUNNING" "EXTRACT CONTENTS OF TABLES FROM $SOURCE_SERVER:$SOURCE_KEYSPACE"
+    #export_tables $SOURCE_SERVER $SOURCE_KEYSPACE
 
-    do_notify "RUNNING" "SHUFLE CONTENTS OF TABLES TO $SHUF_FOLDER"
-    shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
+    #do_notify "RUNNING" "SHUFLE CONTENTS OF TABLES TO $SHUF_FOLDER"
+    #shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
 
-    do_notify "RUNNING" "GET STATISTICS FROM TABLES IN $SHUF_FOLDER"
-    getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
-
+    #do_notify "RUNNING" "GET STATISTICS FROM TABLES IN $SHUF_FOLDER"
+    #getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
+##
     do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
     import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
 else

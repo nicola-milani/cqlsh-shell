@@ -47,9 +47,10 @@ function build_execute(){
         import-table)
             echo "import_table"
             if [ "$HEADER" = "none" ]; then
-                local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} from '$TABLE_FROM' WITH HEADER=true\""
+                local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} from '$TABLE_FROM' WITH HEADER=true;\""
             else
-                local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} ( $HEADER ) from '$TABLE_FROM' WITH HEADER=false\""
+                message "senza intestazione"
+                local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} ($HEADER) from '$TABLE_FROM' WITH HEADER=true;\""
             fi
             #copy datahub.palinsesto  from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
             ;;
@@ -262,14 +263,14 @@ certfile = /root/.cassandra/AmazonRootCA1.pem
 
 [copy-from]
 CHUNKSIZE=30
-INGESTRATE=500
+INGESTRATE=1500
 MAXINSERTERRORS=-1
 MAXPARSEERRORS=-1
 MINBATCHSIZE=1
-MAXBATCHSIZE=10
+MAXBATCHSIZE=25
 
 [copy]
-NUMPROCESSES=16
+NUMPROCESSES=4
 MAXATTEMPTS=25
 
 [csv]
@@ -329,7 +330,8 @@ function running() {
     if [ "$MODE" = "list-tables" ] || [ "$MODE" = "shell" ]; then
         docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
     else
-        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
+        #docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
     fi
 }
 
