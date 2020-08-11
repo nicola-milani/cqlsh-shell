@@ -170,17 +170,30 @@ function import_table(){
     
 
 }
-#TODO
-#import table
 
-#call function
 
 
 lst="${SOURCE_SERVER}_${SOURCE_KEYSPACE}_list_tables"
+target_lst="${TARGET_SERVER}_${TARGET_KEYSPACE}_list_tables"
 
+do_notify "RUNNING" "EXTRACT LIST OF TABLES FROM $SOURCE_SERVER:$SOURCE_KEYSPACE"
 #list_tables $SOURCE_SERVER $SOURCE_KEYSPACE
+do_notify "RUNNING" "EXTRACT LIST OF TABLES FROM $TARGET_SERVER:$TARGET_KEYSPACE"
 #list_tables $TARGET_SERVER $TARGET_KEYSPACE
-export_tables $SOURCE_SERVER $SOURCE_KEYSPACE
-shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
-getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
-#import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
+if [ $(cat $target_lst | wc -l | cut -d " " -f1 ) -eq $(cat $lst | wc -l | cut -d " " -f1 ) ]; then
+
+    do_notify "RUNNING" "EXTRACT CONTENTS OF TABLES FROM $SOURCE_SERVER:$SOURCE_KEYSPACE"
+    export_tables $SOURCE_SERVER $SOURCE_KEYSPACE
+
+    do_notify "RUNNING" "SHUFLE CONTENTS OF TABLES TO $SHUF_FOLDER"
+    shufle_table $SOURCE_SERVER $SOURCE_KEYSPACE
+
+    do_notify "RUNNING" "GET STATISTICS FROM TABLES IN $SHUF_FOLDER"
+    getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
+
+    do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
+    import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
+else
+    error_message "TARGET KEYSPACE AND SOURCE KEYSPACE ARE NOT EQUALS"
+    exit 1
+fi

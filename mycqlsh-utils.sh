@@ -326,7 +326,7 @@ EOF
 }
 
 function running() {
-    if [ "$MODE" = "list-tables" ]; then
+    if [ "$MODE" = "list-tables" ] || [ "$MODE" = "shell" ]; then
         docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
     else
         docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
@@ -494,6 +494,7 @@ while true; do
         exit 0
         ;;
     --shell)
+        MODE=${1#??}
         shift
         SERVER=$1
         shift
