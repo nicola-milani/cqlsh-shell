@@ -23,3 +23,12 @@ destinationsLogs=(1 2 4)
 #
 telegramClient="/usr/local/bin/sendtelegram"
 telegramClientConfigurationFile="/etc/telegramrc"
+
+SOURCE_SERVER="172.19.0.1"
+SOURCE_KEYSPACE="voltron"
+TARGET_SERVER="cassandra.eu-west-1.amazonaws.com"
+TARGET_KEYSPACE="datahub"
+MCS_FOLDER="$(pwd)/MCS_FOLDER"
+RAW_FOLDER="$MCS_FOLDER/raw"
+SOURCE_FOLDER="$MCS_FOLDER/raw/source"
+SHUF_FOLDER="$MCS_FOLDER/raw/source"

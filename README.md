@@ -1,9 +1,4 @@
-# cqlsh-shell
-A simple script to run a cqlsh with docker instance
- 
+# mycqlsh
 
-export schema
-import schema
+This script support your migration process from local cassandra to Amazon Cassandra Services
 
-export list_of_table
-dump 

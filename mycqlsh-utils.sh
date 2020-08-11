@@ -1,13 +1,18 @@
 #!/bin/bash
 #author: Nicola Milani
 
-MCS_FOLDER="./MCS_FOLDER"
+if [ -f ./configuration_setup ]; then
+    source ./configuration_setup
+else
+    echo "configuration setup not found"
+    exit 1
+fi
 
 VERSION=0.2.1
 PROGNAME=${0##*/}
 SHORTOPTS="hvyck:"
-LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-tables:,yes,export-schema,import-schema"
-UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-tables,import-tables"
+LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-table:,yes,export-schema,import-schema,import-table:"
+UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-table,import-table"
 SESSION="cqlsh"
 ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
 eval set -- "$ARGS"
@@ -28,13 +33,18 @@ function build_execute(){
            # echo "list tables on keyspace"
             local text='--execute "describe tables;"'
             ;;
-        export-tables)
-            echo "export_table"
-            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
+        export-table)
+            #echo "export_table"
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=90000\""
             ;;
         import-table)
             echo "import_table"
-            local text="--execute \"COPY ${KEYSPACE}.${TABLE} FROM '/raw/${KEYSPACE}_${TABLE}.csv' WITH HEADER=true\""
+            HEADER="$MCS_FOLDER/raw/source/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv_HEADER_0.csv"
+            #copy datahub.palinsesto  from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
+
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE} ($(cat $HEADER ) from '$MCS_FOLDER/raw/shuf/raw/${SERVER}_${KEYSPACE}_${TABLE}.csv*' WITH HEADER=false\""
+            echo $text
+            exit 1
             ;;
         *) 
             ;;
@@ -291,6 +301,7 @@ services:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
       - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
       - ${MCS_FOLDER}/raw:/raw
+
 EOF
 
 
@@ -308,9 +319,11 @@ EOF
 }
 
 function running() {
-
-    docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
-
+    if [ "$MODE" = "list-tables" ]; then
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
+    else
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
+    fi
 }
 
 function logo() {
@@ -333,8 +346,8 @@ Usage: $PROGNAME <options>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --list-tables
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-schema
-    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-tables: <table name>
-    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-tables: <tables list>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-table: <table name>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-table: <table file>
     --list-auth print list of credentials by server
     --rmauth  remove .credentials
     --clean   remove all temporary files
@@ -356,9 +369,9 @@ services:
     image: cassandra:3.11
     entrypoint: cqlsh
     volumes:
-      - ./MCS_FOLDER/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
-      - ./MCS_FOLDER/cqlshrc:/root/.cassandra/cqlshrc
-      - ./MCS_FOLDER/raw:/raw
+      - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
+      - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
+      - ${MCS_FOLDER}/raw:/raw
 EOF
     docker-compose run --entrypoint bash --rm cqlsh
 }
@@ -502,7 +515,7 @@ while true; do
         review $SERVER
         break;
         ;;
-    --export-tables)
+    --export-table)
         MODE=${1#??}
         shift;
         TABLE_NAME=$1
@@ -510,11 +523,13 @@ while true; do
         review $SERVER
         exit 0
         ;;
-    --import-tables)
+    --import-table)
         MODE=${1#??}
         shift;
-        TABLES_LIST=$1
+        TABLE_NAME=$1
         shift
+        review $SERVER
+        exit 0
         ;;
     -c|--connect)
         review $SERVER
