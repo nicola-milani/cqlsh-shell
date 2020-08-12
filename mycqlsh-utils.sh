@@ -63,7 +63,12 @@ function build_execute(){
             ;;
         count)
             if [ ! -z $PKS ]; then
-                local text="--execute \"copy ${KEYSPACE}.${TABLE_NAME} (${PKS}) TO '/dev/null';\"  "
+                cat <<EOF >${RAW_FOLDER}/entrypoint
+#!/bin/bash
+cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" --keyspace="$KEYSPACE" --request-timeout="$MCS_RTIMEOUT" \
+--execute "copy ${KEYSPACE}.${TABLE_NAME} (${PKS}) to '/dev/null';" > /raw/n_rows
+EOF
+                chmod +x ${RAW_FOLDER}/entrypoint
             else
                 error_message "PRIMARY KEYS IS EMPTY"
             fi
@@ -380,12 +385,33 @@ function running() {
     if [ "$MODE" = "list-tables" ] || [ "$MODE" = "shell" ]; then
         docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
     elif [ "$MODE" = "describe-table" ]; then
-        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}      
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
+    elif [ "$MODE" = "count" ]; then
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --entrypoint /raw/entrypoint --rm cqlsh_${CUSTOM}
+        local EXPECTED_WRITE_INTERVAL_SECONDS=1
+        local FILE="${RAW_FOLDER}/n_rows"
+        while : ; do
+            omod=$(stat -c %Y $FILE)
+            #  echo "OLD: $omod"
+            sleep $EXPECTED_WRITE_INTERVAL_SECONDS
+            nmod=$(stat -c %Y $FILE)
+            #  echo "NEW: $nmod"
+            if [ $omod == $nmod ] ; then
+                    break
+            fi
+        done
+        tr '\r' '\n' < ${RAW_FOLDER}/n_rows > ${RAW_FOLDER}/nrows
+        cat  ${RAW_FOLDER}/nrows | awk 'NF' | tail -2 | head -1 > ${RAW_FOLDER}/nrow
+        rm ${RAW_FOLDER}/n_rows
+        rm ${RAW_FOLDER}/nrows
+        cat ${RAW_FOLDER}/nrow | cut -d ";" -f1 | cut -d ":" -f2 | xargs
+        rm ${RAW_FOLDER}/nrow
     else
         #docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
         docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} | sed -n 5p | cut -d ";" -f1
        #cat ${CUSTOM}_docker-compose.yaml
     fi
+    rm -f ${CUSTOM}_docker-compose.yaml
 }
 
 function logo() {
@@ -431,13 +457,14 @@ services:
 
   cqlsh:
     image: cassandra:3.11
-    entrypoint: cqlsh
+    entrypoint: /raw/pippo 
     volumes:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
       - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
       - ${MCS_FOLDER}/raw:/raw
 EOF
     docker-compose run --entrypoint bash --rm cqlsh
+    rm -f docker-compose.yaml
 }
 
 

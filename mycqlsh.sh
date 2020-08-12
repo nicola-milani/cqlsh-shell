@@ -182,12 +182,14 @@ function count_row(){
     KEYSPACE=$2
     TABLE_LIST="${3}"
     file_output=$4
-    echo "SOURCE_TABLE N_ROW" > $file_output
+    echo "SOURCE_TABLE N_ROWS" > $file_output
     for table in $(cat $TABLE_LIST); do
         message "COUNT $table"
         get_pks $CASSANDRA_HOST $KEYSPACE $TABLE_NAME
-        N_ROW=$($(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --keyspace $KEYSPACE --count $table --with-pk $PRIMARY_KEYS)
-        echo $CASSANDRA_HOST.$KEYSPACE.$table ${N_ROW#*:} >> $file_output
+        $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --keyspace $KEYSPACE --count $table --with-pk ${PRIMARY_KEYS} > /tmp/nrows_$table
+        N_ROW=$(cat /tmp/nrows_$table)
+        echo $CASSANDRA_HOST.$KEYSPACE.$table ${N_ROW} >> $file_output
+        rm -f /tmp/nrows_$table
     done
 }
 
@@ -208,6 +210,7 @@ function get_pks(){
     else
         error_message "NO PRIMARY KEY FOUND"
     fi
+    PRIMARY_KEYS=${PRIMARY_KEYS//[[:blank:]]/}
     rm -f /tmp/pks_00904
 }
 
