@@ -18,8 +18,8 @@ fi
 VERSION=0.2.1
 PROGNAME=${0##*/}
 SHORTOPTS="hvyck:"
-LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-table:,yes,export-schema,import-schema,import-table:,header:,from:"
-UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-table,import-table"
+LONGOPTS="help,version,list-auth,rm-auth,clean,keyspace:,shell:,connect,cmd,list-tables,entrypoint:,export-table:,yes,export-schema,import-schema,import-table:,header:,from:,count:,with-pk:,describe-table:"
+UNIQUEOPTS="help,version,list-authm,rm-auth,clean,cmd,list-tables,export-schema,import-schema,export-table,import-table,count,describe-table"
 SESSION="cqlsh"
 ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
 eval set -- "$ARGS"
@@ -35,6 +35,11 @@ MODE=""
 #BUILD STRING EXECUTE
 function build_execute(){
     #copy one table from keyspace to local
+    if [ -z $KEYSPACE ]; then
+        error_message "--keyspace option is required"
+        usage
+        exit 1
+    fi
     case $MODE in
         list-tables)
            # echo "list tables on keyspace"
@@ -45,7 +50,6 @@ function build_execute(){
             local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
             ;;
         import-table)
-            echo "import_table"
             if [ "$HEADER" = "none" ]; then
                 local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} from '$TABLE_FROM' WITH HEADER=true;\""
             else
@@ -54,10 +58,19 @@ function build_execute(){
             fi
             #copy datahub.palinsesto  from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
             ;;
+        describe-table)
+            local text="--execute \"describe ${KEYSPACE}.${TABLE_NAME};\" "
+            ;;
+        count)
+            if [ ! -z $PKS ]; then
+                local text="--execute \"copy ${KEYSPACE}.${TABLE_NAME} (${PKS}) TO '/dev/null';\"  "
+            else
+                error_message "PRIMARY KEYS IS EMPTY"
+            fi
+            ;;
         *) 
             ;;
     esac
-
 
     EXECUTE=${text}
     #echo $EXECUTE
@@ -203,6 +216,67 @@ function read_credential(){
     done
 }
 
+function cqlshrc_create(){
+    if [ "$MODE" = "--count" ]; then
+        CQLSHRC_FILE="cqlshrc_count"
+        if [ ! -f $CQLSHRC_FILE ]; then
+            cat <<EOF >${CQLSH_CONFIGURATION}/${CQLSHRC_FILE}
+[connection]
+port = 9142
+factory = cqlshlib.ssl.ssl_transport_factory
+
+[ssl]
+validate = true
+certfile = /root/.cassandra/AmazonRootCA1.pem
+
+[copy-from]
+CHUNKSIZE=50
+INGESTRATE=10000
+MAXINSERTERRORS=-1
+MAXPARSEERRORS=-1
+MINBATCHSIZE=1
+MAXBATCHSIZE=25
+
+[copy]
+NUMPROCESSES=4
+MAXATTEMPTS=50
+
+[csv]
+field_size_limit=999999
+
+EOF
+        fi
+    else
+        CQLSHRC_FILE="cqlshrc_default"
+        if [ ! -f $CQLSHRC_FILE ]; then
+            cat <<EOF >${CQLSH_CONFIGURATION}/${CQLSHRC_FILE}
+[connection]
+port = 9142
+factory = cqlshlib.ssl.ssl_transport_factory
+
+[ssl]
+validate = true
+certfile = /root/.cassandra/AmazonRootCA1.pem
+
+[copy-from]
+CHUNKSIZE=30
+INGESTRATE=1500
+MAXINSERTERRORS=-1
+MAXPARSEERRORS=-1
+MINBATCHSIZE=1
+MAXBATCHSIZE=25
+
+[copy]
+NUMPROCESSES=4
+MAXATTEMPTS=50
+
+[csv]
+field_size_limit=999999
+
+EOF
+        fi
+    fi
+}
 #
 # setup configuration file for running connection
 #
@@ -252,31 +326,7 @@ function setup() {
     #create cqlshrc in MCS_FOLDER
     #echo "create cqlshrc file in ${MCS_FOLDER}"
 
-    cat <<EOF >${MCS_FOLDER}/cqlshrc
-[connection]
-port = 9142
-factory = cqlshlib.ssl.ssl_transport_factory
-
-[ssl]
-validate = true
-certfile = /root/.cassandra/AmazonRootCA1.pem
-
-[copy-from]
-CHUNKSIZE=30
-INGESTRATE=1500
-MAXINSERTERRORS=-1
-MAXPARSEERRORS=-1
-MINBATCHSIZE=1
-MAXBATCHSIZE=25
-
-[copy]
-NUMPROCESSES=4
-MAXATTEMPTS=25
-
-[csv]
-field_size_limit=999999
-
-EOF
+    cqlshrc_create
 
    # echo $MCS_HOST
     if [ ! -z $MCS_HOST ]; then
@@ -307,8 +357,8 @@ services:
     entrypoint: cqlsh $MCS_HOST $MCS_PORT -u "$MCS_USERNAME" -p "$MCS_PASSWORD" $MCS_SSL --connect-timeout="$MCS_CTIMEOUT" $MCS_KEYSPACE --request-timeout="$MCS_RTIMEOUT" $EXECUTE
     volumes:
       - ${MCS_FOLDER}/AmazonRootCA1.pem:/root/.cassandra/AmazonRootCA1.pem
-      - ${MCS_FOLDER}/cqlshrc:/root/.cassandra/cqlshrc
-      - ${MCS_FOLDER}/raw:/raw
+      - ${CQLSH_CONFIGURATION}/${CQLSHRC_FILE}:/root/.cassandra/cqlshrc
+      - ${RAW_FOLDER}:/raw
 
 EOF
 
@@ -328,10 +378,13 @@ EOF
 
 function running() {
     if [ "$MODE" = "list-tables" ] || [ "$MODE" = "shell" ]; then
-        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}
+    elif [ "$MODE" = "describe-table" ]; then
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM}      
     else
         #docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 2>&1 > /dev/null
-        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} 
+        docker-compose -f ${CUSTOM}_docker-compose.yaml run --rm cqlsh_${CUSTOM} | sed -n 5p | cut -d ";" -f1
+       #cat ${CUSTOM}_docker-compose.yaml
     fi
 }
 
@@ -356,7 +409,9 @@ Usage: $PROGNAME <options>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-table: <table name>
-    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-table: <table file>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-table: <table name> --header <none|header field> --from <file name>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --count: <table name> --with-pk: (comma separated pk)
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --describe-table: <table name> 
     --list-auth print list of credentials by server
     --rmauth  remove .credentials
     --clean   remove all temporary files
@@ -516,6 +571,31 @@ while true; do
         review $SERVER
         break
         ;;
+    --describe-table)
+        yn=y
+        MODE=${1#??}
+        shift
+        TABLE_NAME=$1
+        review $SERVER
+        break
+        ;;
+    --count)
+        yn=y
+        MODE=${1#??}
+        shift
+        TABLE_NAME=$1
+        shift
+        if [ "$1" = "--with-pk" ]; then
+            shift
+            PKS=$1
+        else
+            error_message "--count require --with-pk option"
+            usage
+            exit 1
+        fi
+        review $SERVER
+        break
+        ;;    
     --export-schema)
         MODE=${1#??}
         review $SERVER

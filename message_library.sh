@@ -26,7 +26,7 @@ fi
 logPath="${THIS_SCRIPT_DIR}/LOGS/"
 mkdir -p $logPath
 logFile="${logPath}/history.log"
-
+mkdir -p $CQLSH_CONFIGURATION
 # CREATE OR ROTATE LOG FILE
 if [ ! -f ${logFile} ]; then
     touch ${logFile}
@@ -37,10 +37,9 @@ fi
 #    fi
 #fi
 
-#
+
 # FUNCTION TO LOG MESSAGE
 #
-
 function do_notify {
     #IF EMPTY, SET SYSLOG AS DEFAULT
     if [ ${#destinationsLogs[@]} -lt 1 ]; then

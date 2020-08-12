@@ -177,6 +177,39 @@ function import_table(){
 }
 
 
+function count_row(){
+    CASSANDRA_HOST=$1
+    KEYSPACE=$2
+    TABLE_LIST="${3}"
+    file_output=$4
+    echo "SOURCE_TABLE N_ROW" > $file_output
+    for table in $(cat $TABLE_LIST); do
+        message "COUNT $table"
+        get_pks $CASSANDRA_HOST $KEYSPACE $TABLE_NAME
+        N_ROW=$($(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --keyspace $KEYSPACE --count $table --with-pk $PRIMARY_KEYS)
+        echo $CASSANDRA_HOST.$KEYSPACE.$table ${N_ROW#*:} >> $file_output
+    done
+}
+
+function get_pks(){
+    local CASSANDRA_HOST=$1
+    local KEYSPACE=$2
+    local TABLE_NAME="${3}"
+    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --keyspace $KEYSPACE --describe-table $table > /tmp/temp_mycqlsh
+    cat /tmp/temp_mycqlsh | grep "PRIMARY KEY" > /tmp/pks_00904
+    if [ $? -eq 0 ]; then
+        rm /tmp/temp_mycqlsh
+        cat /tmp/pks_00904 | grep "("
+        if [ $? -eq 0 ]; then
+            PRIMARY_KEYS=$(cat /tmp/pks_00904 | cut -d "(" -f2 | cut -d ")" -f1)
+        else
+            PRIMARY_KEYS=$(cat /tmp/pks_00904 | xargs | cut -d " " -f1)
+        fi
+    else
+        error_message "NO PRIMARY KEY FOUND"
+    fi
+    rm -f /tmp/pks_00904
+}
 
 lst="${SOURCE_SERVER}_${SOURCE_KEYSPACE}_list_tables"
 target_lst="${TARGET_SERVER}_${TARGET_KEYSPACE}_list_tables"
@@ -198,8 +231,10 @@ if [ $(cat $target_lst | wc -l | cut -d " " -f1 ) -eq $(cat $lst | wc -l | cut -
     #do_notify "RUNNING" "GET STATISTICS FROM TABLES IN $SHUF_FOLDER"
     #getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
 ##
-    do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
-    import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
+   #do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
+   # import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
+    do_notify "COUNT ALL ROW IN EVERY TABLE IN $TARGET_SERVER:$TARGET_KEYSPACE"
+    count_row $TARGET_SERVER $TARGET_KEYSPACE ${lst} ./${TARGET_SERVER}_${TARGET_KEYSPACE}_conteggio
 else
     error_message "TARGET KEYSPACE AND SOURCE KEYSPACE ARE NOT EQUALS"
     exit 1
