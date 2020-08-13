@@ -152,14 +152,14 @@ function import_table(){
     TABLE_LIST="${3}"
     for table in $(cat $TABLE_LIST); do
         message "Provo ad importare la tabella $table"
-        if [ $(ls $SHUF_FOLDER | grep -v merged | grep ${table}.csv | sort -V | wc -l ) -gt 0 ]; then
-            for f in $(ls $SHUF_FOLDER | grep -v merged | grep $table | sort -V ); do
+        if [ $(cat $SHUF_FOLDER/$(ls $SHUF_FOLDER | grep -v merged | grep ${table}.csv | sort -V | head -1) | wc -l ) -gt 0 ]; then
+            for f in $(ls $SHUF_FOLDER | grep -v merged | grep ${table}.csv | sort -V ); do
                 message "proviene dai file ${f}"
                 if [ "${f:(-3)}" = "csv" ]; then
                     message "estraggo intestazione"
                     HEADER=$(cat $SHUF_FOLDER/$f | head -1 | tr -d '\r')
                     do_notify "RUNNGIN" "IMPORT $table to $CASSANDRA_HOST:$KEYSPACE"
-                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table ${table} --header none --from /raw/shuf/$f
+                    $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table ${table} --header auto --from /raw/shuf/$f
                 else
                     $(pwd)/mycqlsh-utils.sh --shell $CASSANDRA_HOST  --yes --keyspace $KEYSPACE --import-table $table --header $HEADER --from /raw/shuf/$f
                 fi
@@ -234,8 +234,8 @@ if [ $(cat $target_lst | wc -l | cut -d " " -f1 ) -eq $(cat $lst | wc -l | cut -
     #do_notify "RUNNING" "GET STATISTICS FROM TABLES IN $SHUF_FOLDER"
     #getStatistics $SOURCE_SERVER $SOURCE_KEYSPACE
 ##
-   #do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
-   # import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
+    do_notify "IMPORT ALL TABLES IN $TARGET_SERVER:$TARGET_KEYSPACE"
+    import_table $TARGET_SERVER $TARGET_KEYSPACE ${lst}
     do_notify "COUNT ALL ROW IN EVERY TABLE IN $TARGET_SERVER:$TARGET_KEYSPACE"
     count_row $TARGET_SERVER $TARGET_KEYSPACE ${lst} ./${TARGET_SERVER}_${TARGET_KEYSPACE}_conteggio
 else

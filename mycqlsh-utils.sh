@@ -50,11 +50,11 @@ function build_execute(){
             local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
             ;;
         import-table)
-            if [ "$HEADER" = "none" ]; then
+            if [ "$HEADER" = "auto" ]; then
                 local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} from '$TABLE_FROM' WITH HEADER=true;\""
             else
                 message "senza intestazione"
-                local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} ($HEADER) from '$TABLE_FROM' WITH HEADER=true;\""
+                local text="--execute \"consistency local_quorum; COPY ${KEYSPACE}.${TABLE_NAME} ($HEADER) from '$TABLE_FROM' WITH HEADER=false;\""
             fi
             #copy datahub.palinsesto  from '/raw/voltron_palinsesto/palinsesto_csv_shuffled/shuffled_palinsesto.csv.2*' with header=false;
             ;;
@@ -435,7 +435,7 @@ Usage: $PROGNAME <options>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-schema
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --export-table: <table name>
-    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-table: <table name> --header <none|header field> --from <file name>
+    --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --import-table: <table name> --header <auto|header field separaded by comma> --from <file name>
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --count: <table name> --with-pk: (comma separated pk)
     --shell <hostname or ip> [--yes] --keyspace: <keyspace_name> --describe-table: <table name> 
     --list-auth print list of credentials by server
@@ -648,7 +648,6 @@ while true; do
         if [ "$1" = "--header" ]; then
             shift
             HEADER=$1
-            echo $HEADER
             shift
             if [ "$1" = "--from" ]; then
                 shift
