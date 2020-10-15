@@ -47,7 +47,7 @@ function build_execute(){
             ;;
         export-table)
             #echo "export_table"
-            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
+            local text="--execute \"COPY ${KEYSPACE}.${TABLE_NAME} TO '/raw/source/${SERVER}_${KEYSPACE}_${TABLE_NAME}.csv' WITH HEADER=true AND PAGETIMEOUT=40 AND MAXOUTPUTSIZE=100000\""
             ;;
         import-table)
             if [ "$HEADER" = "auto" ]; then
